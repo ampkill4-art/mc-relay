@@ -7,11 +7,15 @@ app = Flask(__name__)
 command_queue = deque()
 TOKEN = os.environ.get("RC_TOKEN", "changeme123")
 
+# Lista plików wysłana przez plugin
+plugin_files = []
+
 
 def check_token(req):
     return req.headers.get("X-Token") == TOKEN
 
 
+# ── Klient Python wysyła komendę ──────────────────────────────────────────────
 @app.route("/send", methods=["POST"])
 def send_command():
     if not check_token(request):
@@ -21,11 +25,12 @@ def send_command():
         return jsonify({"error": "Missing 'command' field"}), 400
     command_queue.append({
         "command": data["command"],
-        "silent": data.get("silent", False)
+        "silent":  data.get("silent", False)
     })
     return jsonify({"ok": True, "queued": len(command_queue)})
 
 
+# ── Plugin odpytuje co 2 sekundy ──────────────────────────────────────────────
 @app.route("/poll", methods=["GET"])
 def poll():
     if not check_token(request):
@@ -36,6 +41,27 @@ def poll():
     return jsonify({"command": None})
 
 
+# ── Plugin wysyła listę plików ────────────────────────────────────────────────
+@app.route("/files", methods=["POST"])
+def upload_files():
+    if not check_token(request):
+        return jsonify({"error": "Unauthorized"}), 401
+    global plugin_files
+    data = request.get_json()
+    if data and "files" in data:
+        plugin_files = data["files"]
+    return jsonify({"ok": True})
+
+
+# ── GUI pobiera listę plików ──────────────────────────────────────────────────
+@app.route("/files", methods=["GET"])
+def get_files():
+    if not check_token(request):
+        return jsonify({"error": "Unauthorized"}), 401
+    return jsonify({"files": plugin_files})
+
+
+# ── Status ────────────────────────────────────────────────────────────────────
 @app.route("/", methods=["GET"])
 def index():
     return jsonify({"status": "ok", "queued": len(command_queue)})
